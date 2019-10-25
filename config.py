@@ -1,0 +1,2 @@
+SQLALCHEMY_DATABASE_URI = 'sqlite:////tmp/hmv3.sqlite3'
+SQLALCHEMY_TRACK_MODIFICATIONS = False
