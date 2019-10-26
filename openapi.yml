@@ -1,0 +1,494 @@
+openapi: 3.0.2
+
+info:
+  version: 1.0.0
+  title: HMv3 API
+
+servers:
+  - url: 'http://localhost:5000/'
+
+paths:
+  '/api/available-orders':
+    get:
+      description: Get order for delivery. This route only visible for Carrier.
+        Only `NOT_SENT` orders can be here.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+
+  '/api/getDeliveryReward':
+    get:
+      description: Get delivery reward
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pickupLocation
+          in: path
+          description: Pickup location
+          required: true
+          schema:
+            type: string
+        - name: destination
+          in: path
+          description: Destination
+          required: true
+          schema:
+            type: string
+        - name: weight
+          in: path
+          description: Order weight
+          required: true
+          schema:
+            type: number
+        - name: dimensions
+          in: path
+          description: Order dimensions
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Delivery reward
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reward:
+                    type: number
+                required:
+                - reward
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: weight is required field
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+
+  '/api/confirm-delivery':
+    post:
+      description: Confirm delivery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderSecret:
+                  type: string
+              required:
+                - orderSecret
+      responses:
+        '200':
+          description: Delivery confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+              example:
+                info: Delivery confirmed
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Not Found
+
+  '/api/login':
+    description: Login user
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                required:
+                - token
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: username is required field
+
+  '/api/register':
+    post:
+      description: Register new Shipper or Carrier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - type: object
+                properties:
+                  username:
+                    type: string
+                  password:
+                    type: string
+                  role:
+                    type: string  # delete this line and uncomment next line
+                    # const: SHIPPER
+                  location:
+                    type: string
+                required:
+                  - username
+                  - password
+                  - role
+                  - location
+              - type: object
+                properties:
+                  username:
+                    type: string
+                  password:
+                    type: string
+                  role:
+                    type: string  # delete this line and uncomment next line
+                    # const: CARRIER
+                  location:
+                    type: string
+                  vehicle:
+                    type: string
+                  maxLoad:
+                    type: number
+                required:
+                  - username
+                  - password
+                  - role
+                  - location
+                  - vehicle
+                  - maxLoad
+      responses:
+        '200':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                required:
+                - token
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: username is required field
+
+  '/api/user':
+    get:
+      description: Get user info
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User info
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: object
+                  properties:
+                    role:
+                      type: string  # delete this line and uncomment next line
+                      # const: SHIPPER
+                    username:
+                      type: string
+                    balance:
+                      type: number
+                    location:
+                      type: string
+                  required:
+                  - username
+                  - balance
+                  - location
+                  - role
+                - type: object
+                  properties:
+                    role:
+                      type: string  # delete this line and uncomment next line
+                      # const: CARRIER
+                    username:
+                      type: string
+                    totalBalance:
+                      type: number
+                    lockedBalance:
+                      type: number
+                    availableBalance:
+                      type: number
+                    smartContract:
+                      type: string
+                    vehicle:
+                      type: string
+                    maxLoad:
+                      type: number
+                  required:
+                  - role
+                  - username
+                  - totalBalance
+                  - lockedBalance
+                  - availableBalance
+                  - smartContract
+                  - vehicle
+                  - maxLoad
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+
+  '/api/user/orders':
+    get:
+      security:
+        - bearerAuth: []
+      description: Get user orders. `orderSecret` is visible to Shipper only.
+        Shipper can see all his orders here. Carrier can see only `ON_THE_WAY`
+        and `DELIVERED` orders here.
+      responses:
+        '200':
+          description: Get orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+    post:
+      description: Create new order. This method available only for Shipper.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pickupLocation:
+                  type: string
+                destination:
+                  type: string
+                dimensions:
+                  type: string
+                  pattern: "^\\d+x\\d+x\\d+$"
+                weight:
+                  type: number
+                coverage:
+                  type: number
+                shipmentDate:
+                  type: number
+                  format: date-time
+                deliveryDate:
+                  type: number
+                  format: date-time
+              required:
+              - pickupLocation
+              - destination
+              - dimensions
+              - weight
+              - coverage
+              - shipmentDate
+              - deliveryDate
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+              example:
+                info: Order created
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: destination is required field
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '405':
+          description: Method Not Allowed. Shows for Carrier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Method not allowed
+
+  '/api/orders/{id}/take':
+    post:
+      description: Take an order. This method available only for Carrier.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Order id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Order taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+              example:
+                info: Order taken
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Not Found. Shows for Shipper.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Not Found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    Info:
+      properties:
+        info:
+          type: string
+      required:
+        - info
+    Order:
+      properties:
+        id:
+          type: number
+        status:
+          type: string
+          enum:
+          - NOT_SENT
+          - CANCELLED
+          - ON_THE_WAY
+          - DELIVERED
+        pickupLocation:
+          type: string
+        destination:
+          type: string
+        distance:
+          type: number
+        dimensions:
+          type: string
+          pattern: "^\\d+x\\d+x\\d+$"
+        weight:
+          type: number
+        coverage:
+          type: number
+        reward:
+          type: number
+        shipmentDate:
+          type: number
+          format: date-time
+        deliveryDate:
+          type: number
+          format: date-time
+        carrier:
+          type: string
+        orderSecret:
+          type: string
+      required:
+      - id
+      - pickupLocation
+      - destination
+      - distance
+      - dimensions
+      - weight
+      - coverage
+      - reward
+      - shipmentDate
+      - deliveryDate
