@@ -1,8 +1,7 @@
 from app import db
-import enum
 
 
-class OrderStatus(enum.Enum):
+class OrderStatus:
     NOT_SENT = 'NOT_SENT'
     CANCELLED = 'CANCELLED'
     ON_THE_WAY = 'ON_THE_WAY'
@@ -24,7 +23,7 @@ class Order(db.Model):
     shipper_id = db.Column(db.Integer, db.ForeignKey('shipper.id'))
     carrier_id = db.Column(db.Integer, db.ForeignKey('carrier.id'))
     secret = db.Column(db.String(50), unique=True)
-    status = db.Column(db.Enum(OrderStatus))
+    status = db.Column(db.String(15))
 
     def get_json(self, role):
         data = {
@@ -40,6 +39,8 @@ class Order(db.Model):
             'shipmentDate': self.shipment_date,
             'deliveryDate': self.delivery_date,
             'carrier': self.carrier,
+            'distance': self.distance,
+            'reward': self.reward,
         }
         if role == 'SHIPPER':
             data['orderSecret'] = self.secret

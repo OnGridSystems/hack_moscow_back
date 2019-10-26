@@ -1,5 +1,5 @@
 from app import app, db
-from app.models import Order, Shipper, Carrier
+from app.models import Order, Shipper, Carrier, OrderStatus
 from app.middlewares import session_middleware
 
 from flask import request, jsonify, g
@@ -23,7 +23,7 @@ def register():
         return jsonify({'error': 'No username provided'})
     if not password:
         return jsonify({'error': 'No password provided'})
-    if not address:
+    if not address and role=='SHIPPER':
         return jsonify({'error': 'No address provided'})
 
     if (
@@ -52,7 +52,6 @@ def register():
                 username=username,
                 password=password,
                 token=token,
-                address=address,
                 balance=0,
                 locked=0,
                 vehicle=vehicle,
@@ -105,7 +104,6 @@ def user_info():
             'role': role,
             'username': user.username,
             'balance': user.balance,
-            'location': user.address,
             'totalBalance': user.balance,
             'lockedBalance': user.locked,
             'availableBalance': user.balance - user.locked,
@@ -113,6 +111,21 @@ def user_info():
             'vehicle': user.vehicle,
             'maxLoad': user.max_load,
         }
+
+
+
+@app.route('/api/available-orders')
+@session_middleware
+def available_orders():
+    user = g.user
+    if user.get_role() == 'SHIPPER':
+        return jsonify({'error': 'you have no access'})
+    return jsonify(
+        [
+            o.get_json(user.get_role())
+            for o in Carrier.query.filter_by(status=OrderStatus.NOT_SENT)
+        ]
+    )
 
 
 @app.route('/api/user/orders', methods=['POST', 'GET'])
@@ -139,6 +152,10 @@ def user_orders():
             and shipment_date
             and delivery_date
         ):
+            seed = pickup_location + destination
+            distance = get_distance(seed)
+            reward = distance * 10
+
             o = Order(
                 pickup_location=pickup_location,
                 destination=destination,
@@ -147,6 +164,10 @@ def user_orders():
                 coverage=coverage,
                 shipment_date=shipment_date,
                 delivery_date=delivery_date,
+                status=OrderStatus.NOT_SENT,
+                secret=str(uuid4()),
+                distance=distance,
+                reward=reward,
             )
             user.orders.append(o)
             db.session.add(o)
@@ -159,6 +180,64 @@ def user_orders():
         return jsonify([o.get_json(user.get_role()) for o in user.orders])
     else:
         return jsonify({'error': 'only shipper can create orders'})
+
+
+def get_distance(seed):
+    return int(hashlib.sha1(seed.encode()).hexdigest()[:2], 16)
+
+
+@app.route('/api/getDeliveryReward')
+def get_delivery_reward():
+    pickup_location = request.args.get('pickupLocation')
+    destination = request.args.get('destination')
+
+    if not destination and not pickup_location:
+        return jsonify({'error': 'destination and pickup_locations needs'})
+
+    seed = pickup_location + destination
+    return {
+        'reward': get_distance(seed)*10
+    }
+
+
+@app.route('/api/orders/<int:order_id>/take', methods=['POST'])
+@session_middleware
+def take_order(order_id):
+    user = g.user
+    if user.get_role() == 'CARRIER':
+        o = Order.query.filter_by(id=order_id).first()
+        if user.balance >= o.coverage:
+            user.locked += o.coverage
+            user.orders.append(o)
+            o.status = OrderStatus.ON_THE_WAY
+
+            db.session.add(o)
+            db.session.add(user)
+            db.session.commit()
+
+            return jsonify({'info': 'Order taken'})
+        else:
+            return jsonify({'error': 'your deposit is smaller then coverage'})
+    else:
+        return jsonify({'error': 'CARRIER role needed'})
+
+
+@app.route('/api/api/confirm-delivery', methods=['POST'])
+def confirm():
+    request_body = request.json
+    secret = request_body.get('orderSecret')
+    if secret:
+        o = Order.query.filter_by(secret=secret).first()
+        o.status = OrderStatus.DELIVERED
+        db.session.add(o)
+
+        user = o.carrier
+        user.locked -= o.coverage
+        user.reward += o.reward
+        db.session.add(user)
+
+        db.session.commit()
+    return jsonify({'error': 'no such order'})
 
 
 @app.route('/api/debug/increase-balance', methods=['POST'])
