@@ -1,3 +1,5 @@
+import hashlib
+
 from app import app, db
 from app.models import Order, Shipper, Carrier, OrderStatus
 from app.middlewares import session_middleware
@@ -5,6 +7,13 @@ from app.middlewares import session_middleware
 from flask import request, jsonify, g
 from uuid import uuid4
 
+
+@app.after_request
+def after_request_func(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = '*'
+    return response
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -15,16 +24,16 @@ def register():
     role = request_body.get('role')
     username = request_body.get('username')
     password = request_body.get('password')
-    address = request_body.get('address')
+    address = request_body.get('location')
 
     if not role in ['SHIPPER', 'CARRIER']:
-        return jsonify({'error': 'No role provided'})
+        return jsonify({'error': 'No role provided'}), 400
     if not username:
-        return jsonify({'error': 'No username provided'})
+        return jsonify({'error': 'No username provided'}), 400
     if not password:
-        return jsonify({'error': 'No password provided'})
+        return jsonify({'error': 'No password provided'}), 400
     if not address and role=='SHIPPER':
-        return jsonify({'error': 'No address provided'})
+        return jsonify({'error': 'No location provided'}), 400
 
     if (
         not Shipper.query.filter_by(username=username).first()
@@ -44,9 +53,9 @@ def register():
             max_load = request_body.get('maxLoad')
 
             if not vehicle:
-                return jsonify({'error': 'No role provided'})
+                return jsonify({'error': 'No role provided'}), 400
             if not max_load:
-                return jsonify({'error': 'No role provided'})
+                return jsonify({'error': 'No role provided'}), 400
 
             u = Carrier(
                 username=username,
@@ -62,10 +71,10 @@ def register():
             db.session.add(u)
             db.session.commit()
         except Exception as e:
-            return jsonify({'error': e})
-        return jsonify({'token': token})
+            return jsonify({'error': e}), 500
+        return jsonify({'token': token}), 200
     else:
-        return jsonify({'error': 'Already registrated'})
+        return jsonify({'error': 'Already registrated'}), 400
 
 
 @app.route('/api/login', methods=['POST'])
@@ -80,10 +89,10 @@ def login():
     if not user:
         user = Carrier.query.filter_by(username=username).first()
     if not user:
-        return jsonify({'error': 'No such user'})
+        return jsonify({'error': 'No such user'}), 404
     
     if user.password == password:
-        return jsonify({'token': user.token})
+        return jsonify({'token': user.token}), 200
 
 
 @app.route('/api/user')
@@ -98,7 +107,7 @@ def user_info():
             'username': user.username,
             'balance': user.balance,
             'location': user.address,
-        }
+        }, 200
     elif role == 'CARRIER':
         return {
             'role': role,
@@ -110,7 +119,7 @@ def user_info():
             'smartContract': '0xDJKJKDr6yDS7aDdfghjk234567sdfghj',
             'vehicle': user.vehicle,
             'maxLoad': user.max_load,
-        }
+        }, 200
 
 
 
@@ -119,13 +128,13 @@ def user_info():
 def available_orders():
     user = g.user
     if user.get_role() == 'SHIPPER':
-        return jsonify({'error': 'you have no access'})
+        return jsonify({'error': 'you have no access'}), 401
     return jsonify(
         [
             o.get_json(user.get_role())
             for o in Carrier.query.filter_by(status=OrderStatus.NOT_SENT)
         ]
-    )
+    ), 200
 
 
 @app.route('/api/user/orders', methods=['POST', 'GET'])
@@ -173,31 +182,31 @@ def user_orders():
             db.session.add(o)
             db.session.add(user)
             db.session.commit()
-            return jsonify({'result': 'success'})
+            return jsonify({'info': 'Order created'}), 201
         else:
-            return jsonify({'error': 'wrong request'})
+            return jsonify({'error': 'wrong request'}), 400
     elif request.method == 'GET':
         return jsonify([o.get_json(user.get_role()) for o in user.orders])
     else:
-        return jsonify({'error': 'only shipper can create orders'})
+        return jsonify({'error': 'only shipper can create orders'}), 401
 
 
 def get_distance(seed):
     return int(hashlib.sha1(seed.encode()).hexdigest()[:2], 16)
 
 
-@app.route('/api/getDeliveryReward')
+@app.route('/api/get-delivery-reward')
 def get_delivery_reward():
     pickup_location = request.args.get('pickupLocation')
     destination = request.args.get('destination')
 
     if not destination and not pickup_location:
-        return jsonify({'error': 'destination and pickup_locations needs'})
+        return jsonify({'error': 'no destination or pickupLocation provided'}), 400
 
     seed = pickup_location + destination
     return {
         'reward': get_distance(seed)*10
-    }
+    }, 200
 
 
 @app.route('/api/orders/<int:order_id>/take', methods=['POST'])
@@ -215,11 +224,11 @@ def take_order(order_id):
             db.session.add(user)
             db.session.commit()
 
-            return jsonify({'info': 'Order taken'})
+            return jsonify({'info': 'Order taken'}), 200
         else:
-            return jsonify({'error': 'your deposit is smaller then coverage'})
+            return jsonify({'error': 'your deposit is smaller then coverage'}), 400
     else:
-        return jsonify({'error': 'CARRIER role needed'})
+        return jsonify({'error': 'CARRIER role needed'}), 401
 
 
 @app.route('/api/api/confirm-delivery', methods=['POST'])
@@ -237,7 +246,8 @@ def confirm():
         db.session.add(user)
 
         db.session.commit()
-    return jsonify({'error': 'no such order'})
+        return jsonify({'info': 'Delivery confirmed'}), 200
+    return jsonify({'error': 'no such order'}), 404
 
 
 @app.route('/api/debug/increase-balance', methods=['POST'])
