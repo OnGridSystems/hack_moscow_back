@@ -1,16 +1,50 @@
 from app import db
+import enum
+
+
+class OrderStatus(enum.Enum):
+    NOT_SENT = 'NOT_SENT'
+    CANCELLED = 'CANCELLED'
+    ON_THE_WAY = 'ON_THE_WAY'
+    DELIVERED = 'DELIVERED'
 
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
-    cost = db.Column(db.Integer)
+    reward = db.Column(db.Integer)
     weight = db.Column(db.Integer)
-    dimension = db.Column(db.String(50))
-    
+    dimensions = db.Column(db.String(50))
+    pickup_location = db.Column(db.String(50))
+    destination = db.Column(db.String(50))
+    distance = db.Column(db.Integer)
+    coverage = db.Column(db.Integer)
+    shipment_date = db.Column(db.String(50))
+    delivery_date = db.Column(db.String(50))
     shipper_id = db.Column(db.Integer, db.ForeignKey('shipper.id'))
     carrier_id = db.Column(db.Integer, db.ForeignKey('carrier.id'))
     secret = db.Column(db.String(50), unique=True)
+    status = db.Column(db.Enum(OrderStatus))
+
+    def get_json(self, role):
+        data = {
+            'id': self.id,
+            'status': self.status,
+            'pickupLocation': self.pickup_location,
+            'destination': self.destination,
+            'distance': self.distance,
+            'dimensions': self.dimensions,
+            'weight': self.weight,
+            'coverage': self.coverage,
+            'reward': self.reward,
+            'shipmentDate': self.shipment_date,
+            'deliveryDate': self.delivery_date,
+            'carrier': self.carrier,
+        }
+        if role == 'SHIPPER':
+            data['orderSecret'] = self.secret
+
+        return data
 
     def __repr__(self):
         return f'Order {self.cost} {self.weight}'
@@ -27,6 +61,7 @@ class Shipper(db.Model):
     address = db.Column(db.String(100))
 
     orders = db.relationship('Order', backref='shipper', lazy=True)
+
     def get_role(self):
         return 'SHIPPER'
 

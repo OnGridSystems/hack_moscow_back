@@ -115,6 +115,52 @@ def user_info():
         }
 
 
+@app.route('/api/user/orders', methods=['POST', 'GET'])
+@session_middleware
+def user_orders():
+    user = g.user
+    if request.method == 'POST' and user.get_role() == 'SHIPPER':
+        request_body = request.json
+        
+        pickup_location = request_body['pickupLocation']
+        destination = request_body['destination']
+        dimensions = request_body['dimensions']
+        weight = request_body['weight']
+        coverage = request_body['coverage']
+        shipment_date = request_body['shipmentDate']
+        delivery_date = request_body['deliveryDate']
+        print(pickup_location, destination, dimensions, weight, coverage, shipment_date, delivery_date)
+        if (
+            pickup_location
+            and destination
+            and dimensions
+            and weight is not None
+            and coverage is not None
+            and shipment_date
+            and delivery_date
+        ):
+            o = Order(
+                pickup_location=pickup_location,
+                destination=destination,
+                dimensions=dimensions,
+                weight=weight,
+                coverage=coverage,
+                shipment_date=shipment_date,
+                delivery_date=delivery_date,
+            )
+            user.orders.append(o)
+            db.session.add(o)
+            db.session.add(user)
+            db.session.commit()
+            return jsonify({'result': 'success'})
+        else:
+            return jsonify({'error': 'wrong request'})
+    elif request.method == 'GET':
+        return jsonify([o.get_json(user.get_role()) for o in user.orders])
+    else:
+        return jsonify({'error': 'only shipper can create orders'})
+
+
 @app.route('/api/debug/increase-balance', methods=['POST'])
 def balance_increase():
     request_body = request.json
