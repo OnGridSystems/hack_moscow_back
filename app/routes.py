@@ -15,6 +15,7 @@ def after_request_func(response):
     response.headers['Access-Control-Allow-Methods'] = '*'
     return response
 
+
 @app.route('/api/register', methods=['POST'])
 def register():
     request_body = request.json
@@ -26,13 +27,13 @@ def register():
     password = request_body.get('password')
     address = request_body.get('location')
 
-    if not role in ['SHIPPER', 'CARRIER']:
+    if role not in ['SHIPPER', 'CARRIER']:
         return jsonify({'error': 'No role provided'}), 400
     if not username:
         return jsonify({'error': 'No username provided'}), 400
     if not password:
         return jsonify({'error': 'No password provided'}), 400
-    if not address and role=='SHIPPER':
+    if not address and role == 'SHIPPER':
         return jsonify({'error': 'No location provided'}), 400
 
     if (
@@ -90,7 +91,6 @@ def login():
         user = Carrier.query.filter_by(username=username).first()
     if not user:
         return jsonify({'error': 'No such user'}), 404
-    
     if user.password == password:
         return jsonify({'token': user.token}), 200
 
@@ -102,25 +102,30 @@ def user_info():
     role = user.get_role()
 
     if role == 'SHIPPER':
-        return {
-            'role': role,
-            'username': user.username,
-            'balance': user.balance,
-            'location': user.address,
-        }, 200
+        return (
+            {
+                'role': role,
+                'username': user.username,
+                'balance': user.balance,
+                'location': user.address,
+            },
+            200,
+        )
     elif role == 'CARRIER':
-        return {
-            'role': role,
-            'username': user.username,
-            'balance': user.balance,
-            'totalBalance': user.balance,
-            'lockedBalance': user.locked,
-            'availableBalance': user.balance - user.locked,
-            'smartContract': '0xDJKJKDr6yDS7aDdfghjk234567sdfghj',
-            'vehicle': user.vehicle,
-            'maxLoad': user.max_load,
-        }, 200
-
+        return (
+            {
+                'role': role,
+                'username': user.username,
+                'balance': user.balance,
+                'totalBalance': user.balance,
+                'lockedBalance': user.locked,
+                'availableBalance': user.balance - user.locked,
+                'smartContract': '0xEA674fdDe714fd979de3EdF0F56AA9716B898ec8',
+                'vehicle': user.vehicle,
+                'maxLoad': user.max_load,
+            },
+            200,
+        )
 
 
 @app.route('/api/available-orders')
@@ -129,12 +134,15 @@ def available_orders():
     user = g.user
     if user.get_role() == 'SHIPPER':
         return jsonify({'error': 'you have no access'}), 401
-    return jsonify(
-        [
-            o.get_json(user.get_role())
-            for o in Carrier.query.filter_by(status=OrderStatus.NOT_SENT)
-        ]
-    ), 200
+    return (
+        jsonify(
+            [
+                o.get_json(user.get_role())
+                for o in Order.query.filter_by(status=OrderStatus.NOT_SENT)
+            ]
+        ),
+        200,
+    )
 
 
 @app.route('/api/user/orders', methods=['POST', 'GET'])
@@ -143,7 +151,8 @@ def user_orders():
     user = g.user
     if request.method == 'POST' and user.get_role() == 'SHIPPER':
         request_body = request.json
-        
+
+        # TODO: .get()
         pickup_location = request_body['pickupLocation']
         destination = request_body['destination']
         dimensions = request_body['dimensions']
@@ -151,7 +160,17 @@ def user_orders():
         coverage = request_body['coverage']
         shipment_date = request_body['shipmentDate']
         delivery_date = request_body['deliveryDate']
-        print(pickup_location, destination, dimensions, weight, coverage, shipment_date, delivery_date)
+        phone = request_body['phone']
+
+        print(
+            pickup_location,
+            destination,
+            dimensions,
+            weight,
+            coverage,
+            shipment_date,
+            delivery_date,
+        )
         if (
             pickup_location
             and destination
@@ -160,6 +179,7 @@ def user_orders():
             and coverage is not None
             and shipment_date
             and delivery_date
+            and phone
         ):
             seed = pickup_location + destination
             distance = get_distance(seed)
@@ -177,6 +197,7 @@ def user_orders():
                 secret=str(uuid4()),
                 distance=distance,
                 reward=reward,
+                phone=phone,
             )
             user.orders.append(o)
             db.session.add(o)
@@ -201,12 +222,13 @@ def get_delivery_reward():
     destination = request.args.get('destination')
 
     if not destination and not pickup_location:
-        return jsonify({'error': 'no destination or pickupLocation provided'}), 400
+        return (
+            jsonify({'error': 'no destination or pickupLocation provided'}),
+            400,
+        )
 
     seed = pickup_location + destination
-    return {
-        'reward': get_distance(seed)*10
-    }, 200
+    return {'reward': get_distance(seed) * 10}, 200
 
 
 @app.route('/api/orders/<int:order_id>/take', methods=['POST'])
@@ -226,12 +248,25 @@ def take_order(order_id):
 
             return jsonify({'info': 'Order taken'}), 200
         else:
-            return jsonify({'error': 'your deposit is smaller then coverage'}), 400
+            return (
+                jsonify({'error': 'your deposit is smaller then coverage'}),
+                400,
+            )
     else:
         return jsonify({'error': 'CARRIER role needed'}), 401
 
 
-@app.route('/api/api/confirm-delivery', methods=['POST'])
+@app.route('/api/order-info')
+def single_order_info():
+    secret = request.args.get('orderSecret')
+    if secret:
+        o = Order.query.filter_by(secret=secret).first()
+        return jsonify(o.get_json('SHIPPER')), 200
+    else:
+        return jsonify({'error': 'no such order'}), 404
+
+
+@app.route('/api/confirm-delivery', methods=['POST'])
 def confirm():
     request_body = request.json
     secret = request_body.get('orderSecret')
@@ -242,12 +277,26 @@ def confirm():
 
         user = o.carrier
         user.locked -= o.coverage
-        user.reward += o.reward
+        user.balance += o.reward
         db.session.add(user)
 
         db.session.commit()
         return jsonify({'info': 'Delivery confirmed'}), 200
     return jsonify({'error': 'no such order'}), 404
+
+
+@app.route('/api/orders/<int:order_id>/cancel', methods=['POST'])
+@session_middleware
+def cancel(order_id):
+    user = g.user
+    if user.get_role() == 'SHIPPER':
+        o = Order.query.filter_by(id=order_id).first()
+        o.status = OrderStatus.CANCELLED
+        db.session.add(o)
+        db.session.commit()
+
+        return jsonify({'info': 'order cancelled'}), 200
+    return jsonify({'error': 'only SHIPPER role'}), 401
 
 
 @app.route('/api/debug/increase-balance', methods=['POST'])
@@ -264,9 +313,9 @@ def balance_increase():
 
     user.balance += amount
     try:
-        db.session.add(u)
+        db.session.add(user)
         db.session.commit()
-    except Exception as e: # TODO: change
+    except Exception as e:  # TODO: change
         return jsonify({'error': e})
     return jsonify({'status': 200})
 

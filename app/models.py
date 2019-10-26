@@ -24,6 +24,7 @@ class Order(db.Model):
     carrier_id = db.Column(db.Integer, db.ForeignKey('carrier.id'))
     secret = db.Column(db.String(50), unique=True)
     status = db.Column(db.String(15))
+    phone = db.Column(db.String(15))
 
     def get_json(self, role):
         data = {
@@ -38,17 +39,20 @@ class Order(db.Model):
             'reward': self.reward,
             'shipmentDate': self.shipment_date,
             'deliveryDate': self.delivery_date,
-            'carrier': self.carrier,
             'distance': self.distance,
             'reward': self.reward,
+            'phone': self.phone,
         }
         if role == 'SHIPPER':
             data['orderSecret'] = self.secret
+        if self.carrier:
+            data['carrier'] = self.carrier.username
 
         return data
 
     def __repr__(self):
-        return f'Order {self.cost} {self.weight}'
+        return f'Order {self.reward} {self.weight}'
+
 
 class Shipper(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -72,7 +76,7 @@ class Shipper(db.Model):
 
 class Carrier(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    
+
     username = db.Column(db.String(50), unique=True)
     password = db.Column(db.String(50))
     token = db.Column(db.String(50), unique=True)
@@ -85,6 +89,7 @@ class Carrier(db.Model):
     max_load = db.Column(db.Integer)
 
     orders = db.relationship('Order', backref='carrier', lazy=True)
+
     def get_role(self):
         return 'CARRIER'
 
