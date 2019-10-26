@@ -195,8 +195,6 @@ paths:
                   role:
                     type: string  # delete this line and uncomment next line
                     # const: CARRIER
-                  location:
-                    type: string
                   vehicle:
                     type: string
                   maxLoad:
@@ -205,7 +203,6 @@ paths:
                   - username
                   - password
                   - role
-                  - location
                   - vehicle
                   - maxLoad
       responses:
@@ -341,10 +338,10 @@ paths:
                 coverage:
                   type: number
                 shipmentDate:
-                  type: number
+                  type: string
                   format: date-time
                 deliveryDate:
-                  type: number
+                  type: string
                   format: date-time
               required:
               - pickupLocation
@@ -472,10 +469,10 @@ components:
         reward:
           type: number
         shipmentDate:
-          type: number
+          type: string
           format: date-time
         deliveryDate:
-          type: number
+          type: string
           format: date-time
         carrier:
           type: string
