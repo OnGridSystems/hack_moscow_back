@@ -237,7 +237,7 @@ def take_order(order_id):
     user = g.user
     if user.get_role() == 'CARRIER':
         o = Order.query.filter_by(id=order_id).first()
-        if user.balance >= o.coverage:
+        if user.balance - user.locked >= o.coverage:
             user.locked += o.coverage
             user.orders.append(o)
             o.status = OrderStatus.ON_THE_WAY
@@ -317,7 +317,7 @@ def balance_increase():
         db.session.commit()
     except Exception as e:  # TODO: change
         return jsonify({'error': e})
-    return jsonify({'status': 200})
+    return jsonify({'info': 'balance increased'})
 
 
 @app.route('/api/debug/carriers')
