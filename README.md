@@ -10,7 +10,9 @@ This prototype demonstrates friction-less goods delivery protocol which uses the
 
 # Install and run
 
-TBD
+`pipenv install`
+
+`pipenv run flask run`
 
 # Authors
 * [Alexander Samoylenko](https://github.com/lxmnk)
